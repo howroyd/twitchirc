@@ -19,5 +19,5 @@ classifiers = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/howroyd/twitchplays"
-"Bug Tracker" = "https://github.com/howroyd/twitchplays/issues"
+"Homepage" = "https://github.com/howroyd/twitchirc"
+"Bug Tracker" = "https://github.com/howroyd/twitchirc/issues"
