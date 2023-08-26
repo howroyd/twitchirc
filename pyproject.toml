@@ -4,20 +4,20 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "twitchirc_drgreengiant"
-version = "2.0.0b4"
-authors = [
-  { name="Simon Howroyd", email="howroydlsu@gmail.com" },
-]
+version = "2.0.0rc0"
+authors = [{ name = "Simon Howroyd", email = "howroydlsu@gmail.com" }]
 description = "A simple receive only Twitch IRC client"
+keywords = ["twitch", "irc", "chat"]
 readme = "README.md"
 requires-python = ">=3.11.4"
 classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: GNU General Public License v2 (GPLv2)",
-    "Operating System :: OS Independent",
-    "Topic :: Communications :: Chat :: Internet Relay Chat"
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: GNU General Public License v2 (GPLv2)",
+  "Operating System :: OS Independent",
+  "Topic :: Communications :: Chat :: Internet Relay Chat",
 ]
 
 [project.urls]
 "Homepage" = "https://github.com/howroyd/twitchirc"
+"Repository" = "https://github.com/howroyd/twitchirc"
 "Bug Tracker" = "https://github.com/howroyd/twitchirc/issues"
