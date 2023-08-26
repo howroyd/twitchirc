@@ -29,7 +29,6 @@ jobs:
         python-version: "3.11"
     - name: Install dependencies
       run: |
-        git submodule update --init --recursive
         python -m pip install --upgrade pip
         pip install flake8
         if (Test-Path requirements.txt) {pip install -r requirements.txt}
@@ -39,7 +38,10 @@ jobs:
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    - name: Install twitchirc
+      run: |
+        pip install .
     - name: Test with pytest
       run: |
-        dir
-        # TODO add tests here
+        pip install pytest pytest-cov
+        python run_tests.py
