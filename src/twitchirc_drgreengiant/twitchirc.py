@@ -13,13 +13,16 @@ from typing import NoReturn, Protocol, Self
 
 from . import bufferedsocket
 
+address_tuple = tuple[str, int]
+DEFAULT_SERVER: address_tuple = ("irc.chat.twitch.tv", 6667)
 IRC_LOGFILE = os.getenv("IRC_LOGFILE", None)
 
 
 @enum.unique
 class TwitchMessageEnum(enum.Enum):
-    """Message types defined by Twitch IRC server"""
-    """Ref: https://dev.twitch.tv/docs/irc/example-parser"""
+    """Message types defined by Twitch IRC server
+    Ref: https://dev.twitch.tv/docs/irc/example-parser
+    """
     JOIN = enum.auto()
     PART = enum.auto()
     NOTICE = enum.auto()
@@ -70,7 +73,7 @@ class TwitchMessageEnum(enum.Enum):
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class TwitchMessageProto(Protocol):
-    """Protocol for TwitchMessage"""
+    """Protocol definition for TwitchMessage"""
     username: str
     channel: str
     payload: str
@@ -116,7 +119,8 @@ class NoMessageException(Exception):
 
 @dataclasses.dataclass(slots=True)
 class IrcSocket:
-    address: tuple[str, int] = dataclasses.field(default_factory=lambda: ("irc.chat.twitch.tv", 6667))
+    """Wrapper around a socket for reading and writing to the Twitch IRC server"""
+    address: address_tuple = dataclasses.field(default_factory=lambda: DEFAULT_SERVER)
     timeout: float = 0.25
     sock: bufferedsocket.BufferedSocket = dataclasses.field(init=False)
 
@@ -144,6 +148,8 @@ class IrcSocket:
 
 
 class IrcSocketManaged(IrcSocket):
+    """Context manager for IrcSocket"""
+
     def __enter__(self):
         return self
 
@@ -153,11 +159,12 @@ class IrcSocketManaged(IrcSocket):
 
 @dataclasses.dataclass(slots=True)
 class IrcThreadArgs:
-    address: tuple[str, int]
+    """Arguments for the IRC thread"""
+    address: address_tuple
     timeout: float
     username: str
     oauth: str
-    channel: list[str]
+    channel: frozenset[str]
     max_timeout: float = 5.0
     queue: mp.Queue = dataclasses.field(default_factory=mp.Queue)
     event: mp.Event = dataclasses.field(default_factory=mp.Event)
@@ -176,7 +183,10 @@ def _twitch_irc_thread(args: IrcThreadArgs) -> NoReturn:
         try:
             print("Connecting to Twitch IRC server")
 
-            with IrcSocketManaged(args.address, args.timeout) as irc, open("./logs/" + IRC_LOGFILE, "a") if IRC_LOGFILE else contextlib.nullcontext() as record_file:
+            with contextlib.ExitStack() as stack:
+                irc = stack.enter_context(IrcSocketManaged(args.address, args.timeout))
+                record_file = stack.enter_context(open("./logs/" + IRC_LOGFILE, "a")) if IRC_LOGFILE else None
+
                 irc.write(f'PASS {args.oauth}\r\n')
                 irc.write(f'NICK {args.username}\r\n')
                 [irc.write(f'JOIN #{channel.strip().lower()}\r\n') for channel in args.channel]
@@ -208,7 +218,13 @@ class TwitchIrcConnectionError(Exception):
 
 
 class TwitchIrc:
-    def __init__(self, channel: list[str], username: str | None = None, oauth: str | None = None, timeout: float = None):
+    """Context manager for connecting to Twitch IRC server"""
+
+    def __init__(self,
+                 channel: frozenset[str],
+                 username: str | None = None,
+                 oauth: str | None = None,
+                 timeout: float = None):
         self._processdata = IrcThreadArgs(
             address=("irc.chat.twitch.tv", 6667),
             timeout=0.25,
@@ -251,6 +267,7 @@ class TwitchIrc:
 
     @staticmethod
     def get_message(irc: Self, *, timeout: float = 0.1) -> TwitchMessage | None:
+        """Returns a message from the IRC server, or None if no message is available"""
         msg: TwitchMessage | None = None
         try:
             queue_msg = irc.queue.get(timeout=timeout)
@@ -263,7 +280,9 @@ class TwitchIrc:
 
 
 if __name__ == "__main__":
-    with TwitchIrc("drgreengiant") as irc:
+    testchannels = frozenset(["drgreengiant"])
+
+    with TwitchIrc(testchannels) as irc:
         while True:
             msg = TwitchMessage.from_irc_message(irc.queue.get())
 
