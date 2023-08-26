@@ -225,6 +225,8 @@ class TwitchIrc:
                  username: str | None = None,
                  oauth: str | None = None,
                  timeout: float = None):
+        if not channel or channel.issubset(frozenset([""])):
+            raise TwitchIrcConnectionError("No channels specified")
         self._processdata = IrcThreadArgs(
             address=("irc.chat.twitch.tv", 6667),
             timeout=0.25,
@@ -280,7 +282,8 @@ class TwitchIrc:
 
 
 if __name__ == "__main__":
-    testchannels = frozenset(["drgreengiant"])
+    testchannels = frozenset([""])
+    #testchannels = frozenset(["drgreengiant"])
 
     with TwitchIrc(testchannels) as irc:
         while True:

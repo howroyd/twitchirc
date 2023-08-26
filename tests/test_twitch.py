@@ -1,7 +1,7 @@
 #!./.venv/bin/python3
 import pytest
 
-import twitchirc_drgreengiant as twitchirc
+import twitchirc_drgreengiant.twitchirc as twitchirc
 
 DEFAULT_CHANNELS = frozenset(["drgreengiant"])
 
@@ -39,14 +39,14 @@ def test_message_enum():
         assert val == ret, f"Failed to parse \"{key}\" into {val}: got {ret}"
 
 
-def channel_connection(channel: str):
+def channel_connection(channel: frozenset[str]):
     with twitchirc.TwitchIrc(channel) as irc:
         assert irc.connected, "Thought we were connected but flag isnt set"
 
 
 def test_bad_channel_connection():
     with pytest.raises(twitchirc.TwitchIrcConnectionError):
-        channel_connection("")
+        channel_connection(frozenset([""]))
 
 
 def test_good_channel_connection():
