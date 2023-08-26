@@ -1,8 +1,8 @@
 # TwitchIRC
 
 [![CodeQL Vulnerabilities](https://github.com/howroyd/twitchirc/actions/workflows/codeql-analysis.yml/badge.svg)](https://github.com/howroyd/twitchirc/actions/workflows/codeql-analysis.yml)\
-[![Linting and Testing](https://github.com/howroyd/twitchirc/actions/workflows/python-app.yml/badge.svg)](https://github.com/howroyd/twitchirc/actions/workflows/python-app.yml)\
-[![Upload to PyPi](https://github.com/howroyd/twitchirc/actions/workflows/python-publish.yml/badge.svg)](https://github.com/howroyd/twitchirc/actions/workflows/python-publish.yml)
+[![Linting and Testing](https://github.com/howroyd/twitchirc/actions/workflows/python-testing.yml/badge.svg)](https://github.com/howroyd/twitchirc/actions/workflows/python-testing.yml)\
+[![Build and Release](https://github.com/howroyd/twitchirc/actions/workflows/python-publish.yml/badge.svg)](https://github.com/howroyd/twitchirc/actions/workflows/python-publish.yml)
 
 This module connects to the Twitch IRC as a basic listener client.  It handles the ping pong and initial connection but otherwise does not send anything to Twitch therefore does not appear in the viewer list nor can it post to chat.  As such, no oauth is required, it just works out of the box.
 
