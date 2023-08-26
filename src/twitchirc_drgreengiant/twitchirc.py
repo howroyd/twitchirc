@@ -283,7 +283,7 @@ class TwitchIrc:
 
 if __name__ == "__main__":
     testchannels = frozenset([""])
-    #testchannels = frozenset(["drgreengiant"])
+    # testchannels = frozenset(["drgreengiant"])
 
     with TwitchIrc(testchannels) as irc:
         while True:
