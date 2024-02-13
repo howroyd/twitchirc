@@ -5,8 +5,7 @@ name: Python application
 
 on:
   push:
-    branches:
-      - '*'
+    branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
 
@@ -16,14 +15,18 @@ permissions:
 jobs:
   linting:
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python_version: ["3.11", "3.12"]
     steps:
     - uses: actions/checkout@v4
       with:
         submodules: true
-    - name: Set up Python 3.11
+    - name: Set up Python ${{ matrix.python_version }}
       uses: actions/setup-python@v5
       with:
-        python-version: "3.11"
+        python-version: ${{ matrix.python_version }}
     - name: Install dependencies
       run: |
         git submodule update --init --recursive
@@ -39,14 +42,18 @@ jobs:
 
   pytest:
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python_version: ["3.11", "3.12"]
     steps:
     - uses: actions/checkout@v4
       with:
         submodules: true
-    - name: Set up Python 3.11
+    - name: Set up Python ${{ matrix.python_version }}
       uses: actions/setup-python@v5
       with:
-        python-version: "3.11"
+        python-version: ${{ matrix.python_version }}
     - name: Install dependencies
       run: |
         git submodule update --init --recursive
