@@ -2,124 +2,34 @@
 import contextlib
 import dataclasses
 import datetime
-import enum
+import logging
 import multiprocessing as mp
 import os
-import pprint
+import pathlib
 import queue
 import socket
 import time
-from typing import NoReturn, Protocol, Self
+from typing import NoReturn, Self
 
-from . import bufferedsocket
+import pydantic.dataclasses as pydataclasses
+from rich.logging import RichHandler
 
-address_tuple = tuple[str, int]
+from . import bufferedsocket, message
+
+type address_tuple = tuple[str, int]
 DEFAULT_SERVER: address_tuple = ("irc.chat.twitch.tv", 6667)
-IRC_LOGFILE = os.getenv("IRC_LOGFILE", None)
-
-
-@enum.unique
-class TwitchMessageEnum(enum.Enum):
-    """Message types defined by Twitch IRC server
-    Ref: https://dev.twitch.tv/docs/irc/example-parser
-    """
-    JOIN = enum.auto()
-    PART = enum.auto()
-    NOTICE = enum.auto()
-    CLEARCHAT = enum.auto()
-    HOSTTARGET = enum.auto()
-    PRIVMSG = enum.auto()
-    PING = enum.auto()
-    CAP = enum.auto()
-    GLOBALUSERSTATE = enum.auto()
-    USERSTATE = enum.auto()
-    ROOMSTATE = enum.auto()
-    RECONNECT = enum.auto()
-    NUMERIC = enum.auto()  # All numerics lumped in here.  Extend if required
-
-    @classmethod
-    def match_message_type(cls, string_to_match: str) -> Self | None:
-        """Matches the message type to the TwitchMessageEnum"""
-        match string_to_match.strip().upper():
-            case "JOIN":
-                return cls.JOIN
-            case "PART":
-                return cls.PART
-            case "NOTICE":
-                return cls.NOTICE
-            case "CLEARCHAT":
-                return cls.CLEARCHAT
-            case "HOSTTARGET":
-                return cls.HOSTTARGET
-            case "PRIVMSG":
-                return cls.PRIVMSG
-            case "PING":
-                return cls.PING
-            case "CAP":
-                return cls.CAP
-            case "GLOBALUSERSTATE":
-                return cls.GLOBALUSERSTATE
-            case "USERSTATE":
-                return cls.USERSTATE
-            case "ROOMSTATE":
-                return cls.ROOMSTATE
-            case "RECONNECT":
-                return cls.RECONNECT
-            case "421" | "001" | "002" | "003" | "004" | "353" | "366" | "372" | "375" | "376":
-                return cls.NUMERIC
-            case _:
-                return None
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class TwitchMessageProto(Protocol):
-    """Protocol definition for TwitchMessage"""
-    username: str
-    channel: str
-    payload: str
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class TwitchMessage:
-    """Represents a message from Twitch IRC server"""
-    type: TwitchMessageEnum
-    username: str
-    channel: str
-    payload: str
-
-    @classmethod
-    def from_irc_message(cls, irc_msg: str) -> Self | None:
-        """Creates a TwitchMessage from an IRC message"""
-        msg_type = TwitchMessageEnum.match_message_type(irc_msg.split(maxsplit=2)[1])
-
-        if msg_type is None or msg_type == TwitchMessageEnum.NUMERIC:  # TODO should we keep numerics?
-            return None
-
-        line_split = irc_msg.split(maxsplit=3)
-        idx_of_msg_type = line_split.index(msg_type.name)
-
-        # Remove the username and PRIVMSG from the line
-        line = line_split[idx_of_msg_type + 1:]
-
-        if len(line) != 2:
-            return None
-
-        return cls(
-            type=msg_type,
-            username=line_split[0].split("!")[0].lstrip(":"),
-            channel=line[0].lstrip("#"),
-            payload=line[1].lstrip(":").rstrip("\r\n")
-        )
 
 
 class NoMessageException(Exception):
     """No message received"""
+
     pass
 
 
-@dataclasses.dataclass(slots=True)
+@pydataclasses.dataclass(slots=True)
 class IrcSocket:
     """Wrapper around a socket for reading and writing to the Twitch IRC server"""
+
     address: address_tuple = dataclasses.field(default_factory=lambda: DEFAULT_SERVER)
     timeout: float = 0.25
     sock: bufferedsocket.BufferedSocket = dataclasses.field(init=False)
@@ -135,16 +45,16 @@ class IrcSocket:
         """Reads a line from the buffer"""
         b = self.sock.read()
         if b:
-            return b.decode('utf-8')
+            return b.decode("utf-8")
         return None
 
     def readlines(self) -> list[str]:
         """Reads all lines from the buffer"""
-        return [line.decode('utf-8') for line in self.sock.readlines()]
+        return [line.decode("utf-8") for line in self.sock.readlines()]
 
     def write(self, string: str) -> None:
         """Writes a chunk of data to the buffer"""
-        self.sock.write(bytes(string, 'utf-8'))
+        self.sock.write(bytes(string, "utf-8"))
 
 
 class IrcSocketManaged(IrcSocket):
@@ -157,9 +67,10 @@ class IrcSocketManaged(IrcSocket):
         self.close()
 
 
-@dataclasses.dataclass(slots=True)
+@pydataclasses.dataclass(slots=True)
 class IrcThreadArgs:
     """Arguments for the IRC thread"""
+
     address: address_tuple
     timeout: float
     username: str
@@ -172,32 +83,26 @@ class IrcThreadArgs:
 
 def _twitch_irc_thread(args: IrcThreadArgs) -> NoReturn:
     """Thread for reading from Twitch IRC server"""
-    if IRC_LOGFILE:
-        root = os.path.dirname(os.path.realpath(__file__))
-        logdir = os.path.join(root, "logs")
-        os.makedirs(logdir, exist_ok=True)
-        with open("./logs/" + IRC_LOGFILE, "a") as f:
-            f.write(f"Logging in {__file__} at {datetime.datetime.now().isoformat()}\n")
-
     while True:
         try:
-            print("Connecting to Twitch IRC server")
+            logging.info("Connecting to Twitch IRC server")
 
             with contextlib.ExitStack() as stack:
                 irc = stack.enter_context(IrcSocketManaged(args.address, args.timeout))
-                record_file = stack.enter_context(open("./logs/" + IRC_LOGFILE, "a")) if IRC_LOGFILE else None
 
-                irc.write(f'PASS {args.oauth}\r\n')
-                irc.write(f'NICK {args.username}\r\n')
-                [irc.write(f'JOIN #{channel.strip().lower()}\r\n') for channel in args.channel]
+                irc.write(f"PASS {args.oauth}\r\n")
+                irc.write(f"NICK {args.username}\r\n")
+                [irc.write(f"JOIN #{channel.strip().lower()}\r\n") for channel in args.channel]
 
                 args.event.set()
 
                 while True:
                     lines = irc.readlines()
 
-                    if record_file:
-                        record_file.writelines(lines)
+                    if not lines:
+                        continue
+
+                    logging.debug(lines)
 
                     for line in lines:
                         if "PING :tmi.twitch.tv" in line:
@@ -205,8 +110,8 @@ def _twitch_irc_thread(args: IrcThreadArgs) -> NoReturn:
                         else:
                             args.queue.put(line)
 
-        except (TimeoutError, socket.timeout, socket.error, socket.gaierror, ConnectionResetError, ConnectionAbortedError) as e:
-            print(f"Error in Twitch IRC thread: {e}")
+        except (OSError, TimeoutError, socket.gaierror, ConnectionResetError, ConnectionAbortedError) as e:
+            logging.error(f"Error in Twitch IRC thread: {e}")
             args.event.clear()
             args.timeout = min(args.max_timeout, args.timeout * 2)
             time.sleep(1)
@@ -214,25 +119,18 @@ def _twitch_irc_thread(args: IrcThreadArgs) -> NoReturn:
 
 class TwitchIrcConnectionError(Exception):
     """Failed to connect to the Twitch IRC Server"""
+
     pass
 
 
 class TwitchIrc:
     """Context manager for connecting to Twitch IRC server"""
 
-    def __init__(self,
-                 channel: frozenset[str],
-                 username: str | None = None,
-                 oauth: str | None = None,
-                 timeout: float = None):
+    def __init__(self, channel: frozenset[str], username: str | None = None, oauth: str | None = None, timeout: float = None):
         if not channel or channel.issubset(frozenset([""])):
             raise TwitchIrcConnectionError("No channels specified")
         self._processdata = IrcThreadArgs(
-            address=("irc.chat.twitch.tv", 6667),
-            timeout=0.25,
-            username=username or "justinfan97339",
-            oauth=oauth or "gfdszgfds",
-            channel=channel
+            address=("irc.chat.twitch.tv", 6667), timeout=0.25, username=username or "justinfan97339", oauth=oauth or "gfdszgfds", channel=channel
         )
         self._process: mp.Process | None = None
         self.timeout: float = timeout or 20.0
@@ -268,12 +166,12 @@ class TwitchIrc:
         self.stop()
 
     @staticmethod
-    def get_message(irc: Self, *, timeout: float = 0.1) -> TwitchMessage | None:
+    def get_message(irc: Self, *, timeout: float = 0.1) -> message.TwitchMessage | None:
         """Returns a message from the IRC server, or None if no message is available"""
-        msg: TwitchMessage | None = None
+        msg: message.TwitchMessage | None = None
         try:
             queue_msg = irc.queue.get(timeout=timeout)
-            msg = TwitchMessage.from_irc_message(queue_msg) if queue_msg else None
+            msg = message.TwitchMessage.from_irc_message(queue_msg) if queue_msg else None
             if not msg:
                 raise NoMessageException
         except (NoMessageException, queue.Empty):
@@ -282,12 +180,26 @@ class TwitchIrc:
 
 
 if __name__ == "__main__":
-    testchannels = frozenset([""])
-    # testchannels = frozenset(["drgreengiant"])
+    IRC_LOGFILE = os.getenv("IRC_LOGFILE", None)
+
+    log_handlers = [
+        RichHandler(rich_tracebacks=True, markup=True, show_time=True, show_path=False, show_level=True),
+    ]
+    if IRC_LOGFILE:
+        logpath = pathlib.Path().parent.resolve() / "logs"
+        logpath.mkdir(parents=True, exist_ok=True)
+        file_logger = logging.FileHandler(logpath / IRC_LOGFILE, mode="a", encoding="utf-8")
+        file_logger.setFormatter(logging.Formatter("%(asctime)s|%(levelname)s|%(message)s"))
+        log_handlers.append(file_logger)
+
+    logging.basicConfig(level="NOTSET", format="%(message)s", handlers=log_handlers)
+
+    # testchannels = frozenset([""])
+    testchannels = frozenset(["drgreengiant"])
 
     with TwitchIrc(testchannels) as irc:
         while True:
-            msg = TwitchMessage.from_irc_message(irc.queue.get())
+            msg = message.TwitchMessage.from_irc_message(irc.queue.get())
 
             if msg:
-                pprint.pprint(msg)
+                logging.debug(msg)
